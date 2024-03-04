@@ -1,0 +1,306 @@
+---
+title: "Heating System Renovation"
+author: "Aiden Belt"
+date: "2023-06-04"
+output:
+  flexdashboard::flex_dashboard:
+    vertical_layout: scroll
+    source_code: embed
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(flexdashboard)
+library(tidyverse)
+library(GGally)
+library(caret) #for logistic regression
+library(broom) #for tidy() function
+library(readxl)
+```
+```{r load_data}
+df <- read_excel("ProjectData_belt.xlsx", sheet = "Clean Data")
+```
+
+Introduction {data-orientation=rows}
+=======================================================================
+
+Row {data-height=250}
+-----------------------------------------------------------------------
+
+### Overview 
+
+For this project, we will follow the DCOVAC process. The process is listed below:
+
+DCOVAC – THE DATA MODELING FRAMEWORK
+
+* DEFINE the Problem
+* COLLECT the Data from Appropriate Sources
+* ORGANIZE the Data Collected
+* VISUALIZE the Data by Developing Charts
+* ANALYZE the data with Appropriate Statistical Methods
+* COMMUNICATE your Results
+
+Row {data-height=650}
+-----------------------------------------------------------------------
+
+### The Problem & Data Collection
+
+#### The Problem
+This dataset provides insights into energy efficiency meter evaluated projects for residential existing homes in New York state from 2007-2012. We will examine the variables in the dataset to determine what helps to predict the changes in energy efficiency in these homes.
+
+#### The Data
+This dataset has 2696 rows and 20 variables.
+
+#### Data Sources
+The Devastator. (n.d.). Residential Home Energy Efficiency [Dataset].
+
+
+### The Data
+VARIABLES TO PREDICT WITH
+
+* *home_size*: The size of the home in which the project was completed.
+* *home_vol*: The volume of the home in which the project was completed. 
+* *num_units*: The number of units in the home in which the project was completed.
+* *home_year*: The year the home in which the project was completed was built.
+* *total_cost*: The total cost of the project.
+* *contractor_incentive*: The incentive given to the contractor for completing the project.
+* *total_incentive*: The total incentives given for the project. 
+* *elec_base_kwh*: The baseline electric usage in kWh.
+* *gas_base_mmbtu*: The baseline gas usage in MMBtu.
+* *elec_report*: The reported electric usage in kWh. 
+* *gas_report*: The reported gas usage in MMBtu.
+* *elec_eval_save_kwh*: The evaluated electric usage in kWh. 
+* *gas_eval_save_mmbtu*: The evaluated gas usage in MMBtu. 
+* *National_Grid*: Whether the customer subscribes to National Grid. 
+* *National_Fuel_Gas*: Whether the customer subscribes to National Fuel and Gas.
+* *NYSEG*: Whether the customer subscribes to NYSEG.
+* *Orange_Rockland*: Whether the customer subscribes to Orange & Rockland.
+* *Rochester_Gas_Electric*: Whether the customer subscribes to Rochester Gas & Electric.
+
+VARIABLES WE WANT TO PREDICT
+
+* *est_y1_save*: The estimated first year energy bill savings in dollars.
+* *cust_type*: The type of customer the project was completed for, market(1) or assisted(0). 
+
+
+Data {data-orientation=rows}
+=======================================================================
+
+Column
+-----------------------------------------------------------------------
+
+### Organize the Data
+Organizing data can also include summarizing data values in simple one-way and two-way tables.
+
+```{r, cache=TRUE}
+summary(df)
+```
+All variables that are not pertinent to the dependent variables, such as zip code, locations, and indexes, have been removed. We can see that some of the variables have many null values.
+
+Column
+-----------------------------------------------------------------------
+### Transform Variables
+cust_type is a 1 if they are market, and zero if assisted. This will be transformed into a categorical variable. Each of the different providers will be converted into true = 1, false = 0. 
+
+```{r, cache=TRUE}
+df <- mutate(df,cust_type=as.factor(cust_type),
+             National_Grid=as.factor(National_Grid),
+             National_Fuel_Gas=as.factor(National_Fuel_Gas),
+             NYSEG=as.factor(NYSEG),
+             Orange_Rockland=as.factor(Orange_Rockland),
+             Rochester_Gas_Electric=as.factor(Rochester_Gas_Electric)
+             )
+```
+#### cust_type (Market or Assited?)
+```{r, cache=TRUE}
+as_tibble (select(df,cust_type) %>%
+  table())
+```
+#### cust_type (Market or Assisted)
+
+![](DIST_cust_type.png)
+
+
+
+Data Vizualization #1
+=======================================================================
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### Response Variables
+#### cust_type Market(1)/Assisted(0)
+
+```{r, cache=TRUE}
+as_tibble(select(df,cust_type) %>%
+         table()) %>% #rename(CAT.MEDV=".") %>% 
+  ggplot(aes(y=n,x=cust_type)) + geom_bar(stat="identity")
+```
+We can see we have about 73% of the variable as market customers. Looking at the potential predictors of cust_type, we predict the strongest relationships between total_incentive and home_size.
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Transform Variables
+```{r, cache=TRUE}
+ggpairs(select(df, cust_type, home_year, contractor_incentive, home_size, home_vol, num_units, total_incentive))
+```
+
+Data Vizualization #2
+=======================================================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### Response Variables
+
+#### est_y1_save
+```{r, cache=TRUE}
+ggplot(df, aes(est_y1_save)) + geom_histogram(bins=20)
+```
+We see the largest concentration of values around $0 - $1000. We see the two strongest relationships between home_year and num_units. The data is skewed right. 
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### Transform Variables
+```{r, cache=TRUE}
+ggpairs(select(df, est_y1_save, home_size, home_vol, num_units, home_year, elec_base_kwh, gas_base_mmbtu))
+```
+
+
+est_y1_save Analysis {data-orientation=rows}
+=======================================================================
+
+Row
+-----------------------------------------------------------------------
+
+### Predict Median Value
+For this analysis we will use a Linear Regression Model.
+```{r, include=FALSE, cache=TRUE}
+#the include=FALSE hides the output - remove to see
+est_y1_save_lm <- lm(est_y1_save ~ . -cust_type,data = df)
+summary(est_y1_save_lm)
+```
+
+```{r, include=FALSE, cache=TRUE}
+#the include=FALSE hides the output - remove to see
+tidy(est_y1_save_lm)
+```
+### Adjusted R-Squared
+```{r, cache=TRUE}
+ARSq<-round(summary(est_y1_save_lm)$adj.r.squared,2)
+valueBox(paste(ARSq*100,'%'), icon = "fa-thumbs-down")
+```
+### RMSE
+```{r, cache=TRUE}
+Sig<-round(summary(est_y1_save_lm)$sigma,2)
+valueBox(Sig, icon = "fa-thumbs-down")
+```
+Row
+-----------------------------------------------------------------------
+
+### Regression Output
+```{r,include=FALSE, cache=TRUE}
+knitr::kable(summary(est_y1_save_lm)$coef, digits = 3) #pretty table output
+summary(est_y1_save_lm)$coef
+```
+
+```{r, cache=TRUE}
+# this version sorts the p-values (it is using an index to reorder the coefficients)
+idx <- order(coef(summary(est_y1_save_lm))[,4])  
+out <- coef(summary(est_y1_save_lm))[idx,] 
+knitr::kable(out, digits = 3) #pretty table output
+```
+### Residual Assumptions Explorations
+```{r, cache=TRUE}
+plot(est_y1_save_lm, which=c(1,2)) #which tells which plots to show (1-6 different plots)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Analysis Summary
+After examining this model, we determine that there are some predictors that are not important in prediciting the estimated savings, so a pruned version of the model is created by removing predictors that are not significant.
+
+Row
+-----------------------------------------------------------------------
+
+### Predict Median Value Final Version
+For this analysis we will use a pruned Linear Regression Model. We removed elec_eval_save_kwh, elec_base_kwh, elec_report, home_size, gas_report, gas_base_mmbtu,gas_eval_save_mmbtu, home_vol, and NYSEG.  
+```{r, include=FALSE, cache=TRUE}
+#the include=FALSE hides the output - remove to see
+est_y1_save_lm <- lm(est_y1_save ~ . -elec_eval_save_kwh -elec_base_kwh -elec_report -home_size -gas_report -gas_base_mmbtu -gas_eval_save_mmbtu -home_vol -NYSEG ,data = df)
+summary(est_y1_save_lm)
+```
+
+```{r, include=FALSE, cache=TRUE}
+#the include=FALSE hides the output - remove to see
+tidy(est_y1_save_lm)
+```
+### Adjusted R-Squared
+```{r, cache=TRUE}
+ARSq<-round(summary(est_y1_save_lm)$adj.r.squared,2)
+valueBox(paste(ARSq*100,'%'), icon = "fa-thumbs-down")
+```
+### RMSE
+```{r, cache=TRUE}
+Sig<-round(summary(est_y1_save_lm)$sigma,2)
+valueBox(Sig, icon = "fa-thumbs-down")
+```
+Row
+-----------------------------------------------------------------------
+
+### Regression Output
+```{r, include=FALSE, cache=TRUE}
+knitr::kable(summary(est_y1_save_lm)$coef, digits = 3) #pretty table output
+```
+
+```{r, cache=TRUE}
+# this version sorts the p-values (it is using an index to reorder the coefficients)
+idx <- order(coef(summary(est_y1_save_lm))[,4])  
+out <- coef(summary(est_y1_save_lm))[idx,] 
+knitr::kable(out, digits = 3) #pretty table output
+```
+### Residual Assumptions Explorations
+```{r, cache=TRUE}
+plot(est_y1_save_lm, which=c(1,2)) #which tells which plots to show (1-6 different plots)
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Analysis Summary
+
+After examining this model, looking at the residual plots we can see that there are some issues with our data. The high values at the right of the Q-Q plot could demonstrate some non-linearity or outliers in the data. We can see the same three points in our residuals vs fitted chart. We could transform the data or try some additional models to try to improve this fit.
+
+Reducing the predictors that did not help with prediction of the estimated savings lowered our r^2 and increased our RMSE.
+
+From the following table, we can see the effect on Median Value by the predictor variables.
+```{r, cache=TRUE}
+#create table summary of predictor changes
+predchang = data_frame(
+  Variable = c('home_year', 'total_cost','National_Fuel_Gas1','Orange_Rockland1','Rochester_Gas_Electric1','National_Grid1','cust_type1', 'num_units', 'contractor_incentive', 'total_incentive'),
+  Direction = c('Decrease','Increase','Decrease', 'Decrease','Decrease','Decrease', 'Decrease', 'Increase', 'Increase', 'Increase')
+)
+knitr::kable(predchang) #pretty table output
+```
+cust_type Analysis {data-orientation=rows}
+=======================================================================
+
+Row {data-height=900}
+-----------------------------------------------------------------------
+
+### Predict Customer Type
+![](cust_type_models.png)
+Row
+-----------------------------------------------------------------------
+
+### Analysis Summary
+Examining these models, the Neural Network model performed the most accurately to predict the validation data. The decision tree also performed well in its prediction of the validation data, and we can easily tell how it was able to come to these predictions. It seems that total incentive and total cost were the two largest determining factors of whether the customer was a market customer or an assisted customer.  
+
+Conclusion
+=======================================================================
+### Summary
+
+In conclusion, we see that our predictors can accurately predict what type of customer a person is, but is less successful at accurately predicting what the estimated cost for renovations would be. 
+
